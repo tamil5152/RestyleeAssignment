@@ -27,10 +27,17 @@ class ApiError extends Error {
  * Global error handler middleware
  */
 const errorHandler = (err, req, res, next) => {
-  // Log error for debugging
+  // Log error for debugging (always log server-side, regardless of env —
+  // this only goes to Render's private logs, never to the client response)
+  console.error('=========== SERVER ERROR ===========');
+  console.error('Path:', req.method, req.originalUrl);
+  console.error('Error name:', err.name);
+  console.error('Error message:', err.message);
+  console.error('Stack:', err.stack);
+  console.error('=====================================');
+
   if (process.env.NODE_ENV === 'development') {
     console.error('Error:', err);
-  }
 
   // Handle multer errors
   if (err instanceof multer.MulterError) {
