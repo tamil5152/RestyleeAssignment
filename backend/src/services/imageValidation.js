@@ -128,13 +128,16 @@ class ImageValidationService {
         .toBuffer();
 
       const result = await Tesseract.recognize(
-        processedBuffer,
-        'eng',
-        {
-          logger: () => {}, // Suppress logs
-          errorHandler: () => {}
-        }
-      );
+  processedBuffer,
+  'eng',
+  {
+    logger: () => {},
+    errorHandler: () => {},
+    langPath: path.join(__dirname, '../../'),  // use the bundled eng.traineddata
+    gzip: false,
+    cacheMethod: 'none'
+  }
+);
 
       const text = result.data.text.trim();
       const confidence = result.data.confidence;
