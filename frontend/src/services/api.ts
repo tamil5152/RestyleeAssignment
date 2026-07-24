@@ -30,14 +30,32 @@ apiClient.interceptors.request.use(
 );
 
 // Response interceptor
-apiClient.interceptors.response.use(
-  (response: AxiosResponse) => response,
-  (error: AxiosError<ApiResponse<unknown>>) => {
-    const message = error.response?.data?.message || 'An unexpected error occurred';
-    const errors = error.response?.data?.errors || [message];
+// apiClient.interceptors.response.use(
+//   (response: AxiosResponse) => response,
+//   (error: AxiosError<ApiResponse<unknown>>) => {
+//     const message = error.response?.data?.message || 'An unexpected error occurred';
+//     const errors = error.response?.data?.errors || [message];
 
-    console.error('[API Error]', { message, errors, status: error.response?.status });
-    return Promise.reject({ message, errors, status: error.response?.status });
+//     console.error('[API Error]', { message, errors, status: error.response?.status });
+//     return Promise.reject({ message, errors, status: error.response?.status });
+//   }
+// );
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    console.error("Full Axios Error:", error);
+
+    if (error.response) {
+      console.error("Response:", error.response);
+    }
+
+    if (error.request) {
+      console.error("Request:", error.request);
+    }
+
+    console.error("Error JSON:", error.toJSON?.());
+
+    return Promise.reject(error);
   }
 );
 
