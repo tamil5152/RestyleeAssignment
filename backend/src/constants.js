@@ -43,6 +43,12 @@ const CONSTANTS = {
   // to accept the image as a fashion product.
   FASHION_ML_CONFIDENCE_THRESHOLD: 0.15,
 
+  // Portrait/headshot guard (local pixel heuristic, no external API):
+  // fraction of skin-tone pixels in the upper-center region above which
+  // an image is treated as a close-up face/portrait rather than a
+  // standalone product photo.
+  PORTRAIT_SKIN_RATIO_THRESHOLD: 0.28,
+
   // Subset of the 1000 standard ImageNet classes (as returned by MobileNet)
   // that correspond to clothing, footwear, bags, or accessories. Matching
   // is done as a lowercase substring match against the model's predicted
@@ -162,6 +168,7 @@ const CONSTANTS = {
     IMAGE_TOO_SMALL: 'Image dimensions must be at least {minWidth}x{minHeight} pixels.',
     IMAGE_TOO_LARGE: 'Image dimensions must not exceed {maxWidth}x{maxHeight} pixels.',
     NOT_FASHION_IMAGE: 'The uploaded image does not appear to contain a fashion product. Please upload images of clothing, footwear, bags, or accessories.',
+    NOT_PRODUCT_PORTRAIT: 'The uploaded image looks like a close-up face/portrait photo rather than a standalone product image. Please upload a photo of the item itself (flat lay, hanger, mannequin, or clearly framed) without a face filling the frame.',
     TEXT_DETECTED: 'Images containing text are not allowed. Please upload clean product images without text overlays, watermarks, or captions.',
     PERSONAL_INFO_DETECTED: 'Product description contains personal information (email, phone, social media, or IDs). Please remove it before submitting.',
     SPECIAL_CHARACTERS_DETECTED: 'Description contains special characters that are not allowed: {chars}. Use only letters, numbers, and basic punctuation (. , ! ? \' -).',

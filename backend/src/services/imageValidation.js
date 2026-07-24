@@ -331,6 +331,71 @@ class ImageValidationService {
   }
 
   /**
+   * Detect if an image is dominated by a close-up human face/portrait
+   * rather than being a standalone product photo. Purely local pixel-
+   * based skin-tone + composition heuristic - no external API, no
+   * additional model download. Exists because MobileNet alone will
+   * happily label a headshot of someone wearing a suit as "isFashion:
+   * true" (it correctly sees a suit/tie, but has no notion of "this is
+   * a face closeup, not a product photo").
+   *
+   * @param {Buffer} buffer - Image buffer
+   * @returns {Promise<{isPortrait: boolean, skinRatio: number}>}
+   */
+  async detectPortraitFace(buffer) {
+    try {
+      const size = 150;
+      const { data, info } = await sharp(buffer)
+        .resize(size, size, { fit: 'fill' })
+        .removeAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+
+      const { width, height, channels } = info;
+      const rowBytes = width * channels;
+
+      // A headshot puts the face in the upper-center of the frame.
+      const regionBottom = Math.floor(height * 0.65);
+      const regionLeft = Math.floor(width * 0.2);
+      const regionRight = Math.floor(width * 0.8);
+
+      let skinPixels = 0;
+      let regionPixels = 0;
+
+      for (let y = 0; y < regionBottom; y++) {
+        for (let x = regionLeft; x < regionRight; x++) {
+          const idx = y * rowBytes + x * channels;
+          const r = data[idx];
+          const g = data[idx + 1];
+          const b = data[idx + 2];
+
+          regionPixels++;
+
+          // Standard RGB skin-tone heuristic.
+          const max = Math.max(r, g, b);
+          const min = Math.min(r, g, b);
+          const isSkin =
+            r > 95 && g > 40 && b > 20 &&
+            (max - min) > 15 &&
+            Math.abs(r - g) > 15 &&
+            r > g && r > b;
+
+          if (isSkin) skinPixels++;
+        }
+      }
+
+      const skinRatio = regionPixels > 0 ? skinPixels / regionPixels : 0;
+
+      return {
+        isPortrait: skinRatio >= CONSTANTS.PORTRAIT_SKIN_RATIO_THRESHOLD,
+        skinRatio: Math.round(skinRatio * 100) / 100
+      };
+    } catch (error) {
+      return { isPortrait: false, skinRatio: 0 };
+    }
+  }
+
+  /**
    * Run complete validation on a single image
    * @param {Object} file - Multer file object
    * @returns {Promise<Object>} Complete validation result
@@ -375,6 +440,14 @@ class ImageValidationService {
     results.fashionDetection = await this.detectFashionProduct(buffer);
     if (!results.fashionDetection.isFashion) {
       results.errors.push(CONSTANTS.MESSAGES.NOT_FASHION_IMAGE);
+    }
+
+    // Step 4b: Portrait/headshot guard - reject close-up face photos
+    // even when clothing is technically visible (e.g. a person wearing
+    // a suit), since these are not standalone product photos.
+    results.portraitDetection = await this.detectPortraitFace(buffer);
+    if (results.portraitDetection.isPortrait) {
+      results.errors.push(CONSTANTS.MESSAGES.NOT_PRODUCT_PORTRAIT);
     }
 
     // Step 5: Text detection
