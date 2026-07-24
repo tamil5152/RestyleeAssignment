@@ -493,4 +493,19 @@ class ImageValidationService {
    * Generate thumbnail for image
    * @param {Buffer} buffer - Image buffer
    * @param {string} filename - Target filename
-   * @returns {Promise<string>} Path to saved
+   * @returns {Promise<string>} Path to saved thumbnail
+   */
+  async generateThumbnail(buffer, filename) {
+    const thumbnailName = `thumb_${filename}`;
+    const outputPath = path.join(CONSTANTS.UPLOAD_DIR, thumbnailName);
+
+    await sharp(buffer)
+      .resize(300, 300, { fit: 'cover' })
+      .jpeg({ quality: 80 })
+      .toFile(outputPath);
+
+    return outputPath;
+  }
+}
+
+module.exports = new ImageValidationService();
