@@ -80,7 +80,8 @@ const CONSTANTS = {
   PERSONAL_INFO_PATTERNS: [
     // Email addresses
     /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/,
-    // Phone numbers (various formats)
+    // Phone numbers (various formats including spaced out digits like "9 9 8 2 3 3 2 2 2 2")
+    /(?:\d[\s.-]*){10,15}/,
     /\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/,
     /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/,
     // Social media handles
@@ -115,9 +116,11 @@ const CONSTANTS = {
   // Words/phrases that typically precede or indicate a social handle or
   // contact request that isn't already caught by @handle / URL patterns.
   SOCIAL_MEDIA_PATTERNS: [
-    /\b(insta|instagram|ig id|fb|facebook|snap|snapchat|whatsapp|whats\s?app|telegram|\btg\b|twitter)\b[\s:.-]*[A-Za-z0-9._]{2,}/i,
-    /\b(dm|message|contact|reach)\s+me\b/i,
-    /\bmy\s+(insta|instagram|snap|whatsapp|number|contact)\b/i
+    /\b(insta|instagram|ig id|fb|facebook|snap|snapchat|whatsapp|whats\s?app|telegram|\btg\b|twitter|tiktok)\b[\s:.-]*[A-Za-z0-9._]{2,}/i,
+    /\b(dm|message|contact|reach)\s+(me|us)\b/i,
+    /\bmy\s+(insta|instagram|snap|sc|whatsapp|number|contact|username|user|handle|ig)\b/i,
+    /\b(username|user name|sc)\s+[:.-]*\s*([a-z0-9._]{3,})/i,
+    /\b(check out|follow)\s+(my\s+)?(username|sc|insta|instagram|ig|fb|facebook|snapchat|handle|page)\b/i
   ],
 
   // Common English stopwords, excluded when checking topical relevance /
@@ -154,6 +157,70 @@ const CONSTANTS = {
     'season', 'outfit', 'outerwear', 'footwear', 'accessory', 'accessories'
   ],
 
+  COMMON_WORDS: [
+    'this', 'that', 'item', 'product', 'piece', 'clothing', 'apparel',
+    'clothes', 'wear', 'condition', 'excellent', 'good', 'fair', 'poor',
+    'new', 'used', 'gently', 'worn', 'never', 'smoke', 'free', 'pet',
+    'home', 'clean', 'stain', 'flaw', 'flawless', 'great', 'nice',
+    'nicely', 'original', 'authentic', 'genuine', 'brand', 'vintage',
+    'retro', 'modern', 'classic', 'stylish', 'trendy', 'casual', 'formal',
+    'party', 'work', 'sport', 'summer', 'winter', 'spring', 'fall',
+    'autumn', 'season', 'men', 'mens', 'women', 'womens', 'unisex',
+    'kids', 'boy', 'boys', 'girl', 'girls', 'height', 'width', 'length',
+    'depth', 'bust', 'waist', 'hips', 'size', 'sizes', 'small', 'medium',
+    'large', 'xl', 'xxl', 'xs', 's', 'm', 'l', 'natural', 'pure',
+    'cotton', 'wool', 'silk', 'linen', 'leather', 'denim', 'polyester',
+    'nylon', 'spandex', 'rayon', 'fur', 'faux', 'synthetic', 'top',
+    'bottom', 'shirt', 'pants', 'jacket', 'coat', 'shoes', 'boots',
+    'sneakers', 'sandals', 'heels', 'flats', 'dress', 'skirt', 'sweater',
+    'hoodie', 'tshirt', 'blouse', 'shorts', 'bag', 'handbag', 'backpack',
+    'belt', 'hat', 'cap', 'scarf', 'gloves', 'glasses', 'watch',
+    'jewelry', 'red', 'blue', 'green', 'yellow', 'black', 'white',
+    'grey', 'gray', 'pink', 'purple', 'orange', 'brown', 'beige',
+    'navy', 'gold', 'silver', 'cream', 'ivory', 'khaki', 'print',
+    'pattern', 'striped', 'checkered', 'plaid', 'floral', 'solid',
+    'tag', 'tags', 'box', 'receipt', 'fast', 'shipping', 'ship',
+    'same', 'day', 'next', 'bundle', 'discount', 'offer', 'offers',
+    'price', 'firm', 'cheap', 'deal', 'sale', 'check', 'out', 'other',
+    'items', 'listings', 'shop', 'buy', 'sell', 'sold', 'order',
+    'contact', 'question', 'questions', 'ask', 'feel', 'details',
+    'info', 'description', 'fit', 'fits', 'fitted', 'loose', 'tight',
+    'slim', 'oversized', 'cropped', 'sleeveless', 'short', 'long',
+    'zipper', 'button', 'buttons', 'pocket', 'pockets', 'hood',
+    'lined', 'padded', 'soft', 'warm', 'cozy', 'comfortable', 'comfy',
+    'durable', 'sturdy', 'imported', 'local', 'usa', 'uk', 'eu',
+    'elegant', 'dry', 'only', 'care', 'wash', 'hand', 'machine',
+    'cold', 'gentle', 'line', 'hang', 'tumble', 'iron', 'steam',
+    'bleach', 'smooth', 'light', 'heavy', 'stretch', 'breathable',
+    'premium', 'luxury', 'beautiful', 'pretty', 'gorgeous', 'cute',
+    'cool', 'fancy', 'smart', 'sharp', 'sleek', 'neat', 'fresh',
+    'bright', 'dark', 'shade', 'tone', 'style', 'fashion', 'design',
+    'designer', 'texture', 'finish', 'lining', 'collar', 'cuff',
+    'cuffs', 'sleeve', 'sleeves', 'hem', 'seam', 'seams', 'stitch',
+    'stitching', 'strap', 'straps', 'buckle', 'clasp', 'snap',
+    'hook', 'tie', 'bow', 'lace', 'ribbon', 'fringe', 'ruffle',
+    'ruffles', 'pleat', 'pleats', 'elastic', 'drawstring', 'belted',
+    'quilted', 'distressed', 'washed', 'dyed', 'embroidered', 'beaded',
+    'sequined', 'printed', 'woven', 'knit', 'knitted', 'crochet',
+    'braided', 'patch', 'patches', 'logo', 'graphic', 'emblem',
+    'badge', 'crest', 'symbol', 'label', 'name', 'number', 'model',
+    'type', 'kind', 'category', 'collection', 'look', 'vibe',
+    'aesthetic', 'outfit', 'set', 'pair', 'pack', 'lot', 'bundle',
+    'match', 'matching', 'accent', 'trim', 'detail', 'details',
+    'feature', 'features', 'front', 'back', 'top', 'bottom', 'inside',
+    'outside', 'inner', 'outer', 'upper', 'lower', 'left', 'right',
+    'center', 'base', 'edge', 'border', 'layer', 'panel', 'strip',
+    'band', 'ring', 'loop', 'chain', 'cord', 'string', 'thread',
+    'yarn', 'fiber', 'fabric', 'material', 'blend', 'mixture',
+    'combination', 'variety', 'range', 'selection', 'assortment',
+    'quality', 'state', 'shape', 'cut', 'silhouette', 'measurement',
+    'measurements', 'dimension', 'dimensions', 'weight', 'worth',
+    'value', 'rate', 'cost', 'fee', 'charge', 'postage', 'freight',
+    'delivery', 'handling', 'return', 'exchange', 'refund',
+    'guarantee', 'warranty', 'note', 'notes', 'comment', 'comments',
+    'tip', 'gift', 'present', 'gem', 'find', 'bargain'
+  ],
+
   // Word-repetition spam guard: if one meaningful word makes up more than
   // this fraction of all meaningful words in the description, it's
   // flagged as excessive (not zero-tolerance - some repetition is normal).
@@ -174,6 +241,7 @@ const CONSTANTS = {
     SPECIAL_CHARACTERS_DETECTED: 'Description contains special characters that are not allowed: {chars}. Use only letters, numbers, and basic punctuation (. , ! ? \' -).',
     SLANG_DETECTED: 'Description contains informal short forms that are not allowed: {words}. Please write them out in full.',
     USERNAME_DETECTED: 'Description appears to contain a username or social media handle: "{match}". Please remove it.',
+    ABNORMAL_WORD_DETECTED: 'Description contains abnormal or misspelled word(s): "{words}". Please use standard words.',
     DESCRIPTION_NOT_RELEVANT: 'Description does not appear to be related to the product name "{name}". Please describe the actual item.',
     EXCESSIVE_REPETITION: 'Description repeats the word "{word}" too many times. Please vary your wording.',
     MIN_IMAGES_REQUIRED: 'At least 2 product images are required.',

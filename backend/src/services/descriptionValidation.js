@@ -185,6 +185,70 @@ function checkRepetition(description) {
 }
 
 /**
+ * Check for abnormal, misspelled, or non-standard words (e.g. gibberish, "fondition", "rheaasinghall").
+ * @param {string} description
+ * @returns {string[]} error messages
+ */
+function checkAbnormalWords(description) {
+  const commonSet = new Set([
+    ...(CONSTANTS.COMMON_WORDS || []),
+    ...(CONSTANTS.FASHION_VOCAB || []),
+    ...(CONSTANTS.STOPWORDS || [])
+  ].map((w) => w.toLowerCase()));
+
+  const words = tokenize(description);
+  const abnormal = [];
+
+  for (const rawWord of words) {
+    const w = rawWord.toLowerCase();
+
+    // 1. Numbers and measurements (e.g. 10, 30cm, 100%, 50m, xl, 3xl, s, m, l)
+    if (/^\d+[a-z%]*$/.test(w) || /^[a-z]+\d+$/.test(w)) continue;
+
+    // 2. Single letter words
+    if (w.length === 1) continue;
+
+    // 3. Exact dictionary match
+    if (commonSet.has(w)) continue;
+
+    // 4. Try basic English suffix stripping (-s, -es, -ed, -ing, -ly, -er, -y)
+    let stemFound = false;
+    const stems = [
+      w.replace(/s$/, ''),
+      w.replace(/es$/, ''),
+      w.replace(/ed$/, ''),
+      w.replace(/ing$/, ''),
+      w.replace(/ing$/, 'e'),
+      w.replace(/er$/, ''),
+      w.replace(/er$/, 'e'),
+      w.replace(/ly$/, ''),
+      w.replace(/y$/, 'ie'),
+      w.replace(/ies$/, 'y')
+    ];
+
+    for (const stem of stems) {
+      if (stem && commonSet.has(stem)) {
+        stemFound = true;
+        break;
+      }
+    }
+
+    if (stemFound) continue;
+
+    abnormal.push(rawWord);
+  }
+
+  if (abnormal.length > 0) {
+    const uniqueAbnormal = [...new Set(abnormal)];
+    return [
+      CONSTANTS.MESSAGES.ABNORMAL_WORD_DETECTED.replace('{words}', uniqueAbnormal.join(', '))
+    ];
+  }
+
+  return [];
+}
+
+/**
  * Run all description content-quality checks.
  * @param {string} name - Product name (used for the relevance check)
  * @param {string} description - Product description
@@ -196,6 +260,7 @@ function validateDescriptionContent(name, description) {
     ...checkSpecialCharacters(description),
     ...checkSlang(description),
     ...checkUsernames(description),
+    ...checkAbnormalWords(description),
     ...checkRelevance(name || '', description),
     ...checkRepetition(description)
   ];
