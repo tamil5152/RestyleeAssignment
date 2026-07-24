@@ -185,6 +185,81 @@ function checkRepetition(description) {
 }
 
 /**
+ * Check for unallowed raw numbers or digit sequences (e.g. "23232323", "9876543").
+ * Only valid sizes (e.g. Size 10), measurements (e.g. 30cm, 100%), years (1990-2030),
+ * or small count numbers (1-10) are allowed.
+ * @param {string} text
+ * @returns {string[]} error messages
+ */
+function checkUnallowedNumbers(text) {
+  const tokens = text.match(/[a-z0-9%']+/gi) || [];
+  const invalidNumbers = [];
+
+  const allowedUnits = new Set([
+    'cm', 'm', 'mm', 'in', 'inch', 'inches', 'ft', 'foot', 'feet',
+    'kg', 'g', 'lb', 'lbs', 'oz', '%', 'pct', 'percent',
+    's', 'v', 'pack', 'piece', 'pieces', 'pair', 'pairs', 'set', 'sets',
+    'way', 'ply', 'gen', 'xl', 'xxl', '3xl', 'xs'
+  ]);
+
+  const sizeContextWords = new Set([
+    'size', 'sizes', 'bust', 'waist', 'hips', 'chest', 'height', 'width', 'length',
+    'depth', 'fit', 'fits', 'level', 'grade', 'model', 'type', 'lot', 'pack', 'set'
+  ]);
+
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i].toLowerCase();
+    
+    if (!/\d/.test(token)) continue;
+
+    const digitsOnly = token.replace(/\D/g, '');
+    if (digitsOnly.length >= 7) {
+      invalidNumbers.push(token);
+      continue;
+    }
+
+    if (/^\d+$/.test(token)) {
+      const num = parseInt(token, 10);
+
+      if (token.length === 4 && num >= 1900 && num <= 2030) continue;
+
+      const prevToken = i > 0 ? tokens[i - 1].toLowerCase() : '';
+      const nextToken = i < tokens.length - 1 ? tokens[i + 1].toLowerCase() : '';
+
+      if (sizeContextWords.has(prevToken)) continue;
+      if (allowedUnits.has(nextToken)) continue;
+
+      if (num >= 1 && num <= 10 && token.length <= 2) continue;
+
+      invalidNumbers.push(token);
+      continue;
+    }
+
+    const match = token.match(/^(\d+)([a-z%]+)$/);
+    if (match) {
+      const [, digits, unit] = match;
+      
+      if (allowedUnits.has(unit)) continue;
+      if (digits.length <= 2 && (unit === 's' || unit === 'th' || unit === 'st' || unit === 'nd' || unit === 'rd')) continue;
+
+      invalidNumbers.push(token);
+      continue;
+    }
+
+    invalidNumbers.push(token);
+  }
+
+  if (invalidNumbers.length > 0) {
+    const unique = [...new Set(invalidNumbers)];
+    return [
+      (CONSTANTS.MESSAGES.UNALLOWED_NUMBERS_DETECTED || 'Text contains unallowed or random numbers: "{numbers}". Only valid sizes (e.g. Size 10), measurements (e.g. 30cm, 100%), or years (e.g. 1990s) are allowed.').replace('{numbers}', unique.join(', '))
+    ];
+  }
+
+  return [];
+}
+
+/**
  * Check for abnormal, misspelled, or non-standard words (e.g. gibberish, "fondition", "rheaasinghall").
  * @param {string} description
  * @returns {string[]} error messages
@@ -202,16 +277,16 @@ function checkAbnormalWords(description) {
   for (const rawWord of words) {
     const w = rawWord.toLowerCase();
 
-    // 1. Numbers and measurements (e.g. 10, 30cm, 100%, 50m, xl, 3xl, s, m, l)
-    if (/^\d+[a-z%]*$/.test(w) || /^[a-z]+\d+$/.test(w)) continue;
+    // If word contains digits, defer digit validation to checkUnallowedNumbers
+    if (/\d/.test(w)) continue;
 
-    // 2. Single letter words
+    // Single letter words
     if (w.length === 1) continue;
 
-    // 3. Exact dictionary match
+    // Exact dictionary match
     if (commonSet.has(w)) continue;
 
-    // 4. Try basic English suffix stripping (-s, -es, -ed, -ing, -ly, -er, -y)
+    // Try basic English suffix stripping (-s, -es, -ed, -ing, -ly, -er, -y)
     let stemFound = false;
     const stems = [
       w.replace(/s$/, ''),
@@ -249,6 +324,35 @@ function checkAbnormalWords(description) {
 }
 
 /**
+ * Run content-quality checks on Product Name.
+ * @param {string} name - Product name
+ * @returns {{isValid: boolean, errors: string[]}}
+ */
+function validateProductNameContent(name) {
+  if (!name || !name.trim()) {
+    return { isValid: false, errors: ['Product name is required.'] };
+  }
+
+  if (name.trim().length > 100) {
+    return { isValid: false, errors: ['Product name must not exceed 100 characters.'] };
+  }
+
+  const errors = [
+    ...checkPersonalInfo(name),
+    ...checkSpecialCharacters(name),
+    ...checkSlang(name),
+    ...checkUsernames(name),
+    ...checkUnallowedNumbers(name),
+    ...checkAbnormalWords(name)
+  ];
+
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+}
+
+/**
  * Run all description content-quality checks.
  * @param {string} name - Product name (used for the relevance check)
  * @param {string} description - Product description
@@ -260,6 +364,7 @@ function validateDescriptionContent(name, description) {
     ...checkSpecialCharacters(description),
     ...checkSlang(description),
     ...checkUsernames(description),
+    ...checkUnallowedNumbers(description),
     ...checkAbnormalWords(description),
     ...checkRelevance(name || '', description),
     ...checkRepetition(description)
@@ -272,5 +377,6 @@ function validateDescriptionContent(name, description) {
 }
 
 module.exports = {
+  validateProductNameContent,
   validateDescriptionContent
 };

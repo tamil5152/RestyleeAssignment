@@ -218,7 +218,14 @@ const CONSTANTS = {
     'value', 'rate', 'cost', 'fee', 'charge', 'postage', 'freight',
     'delivery', 'handling', 'return', 'exchange', 'refund',
     'guarantee', 'warranty', 'note', 'notes', 'comment', 'comments',
-    'tip', 'gift', 'present', 'gem', 'find', 'bargain'
+    'tip', 'gift', 'present', 'gem', 'find', 'bargain', 'made', 'make',
+    'blazer', 'activewear', 'canvas', 'tote', 'collection', 'style',
+    'look', 'lookbook', 'wardrobe', 'closet', 'edition', 'recycled',
+    'true', 'cashmere', 'organic', 'polo', 'cargo', 'chiffon', 'velvet',
+    'cardigan', 'puffer', 'jumper', 'high', 'waisted', 'crafted',
+    'stitched', 'tailored', 'fitting', 'garment', 'garments', 'midi',
+    'mini', 'maxi', 'tunic', 'romper', 'onesie', 'bodysuit', 'overalls',
+    'jumpsuit', 'kimono', 'kaftan', 'poncho', 'shawl', 'vest', 'shrug'
   ],
 
   // Word-repetition spam guard: if one meaningful word makes up more than
@@ -242,6 +249,7 @@ const CONSTANTS = {
     SLANG_DETECTED: 'Description contains informal short forms that are not allowed: {words}. Please write them out in full.',
     USERNAME_DETECTED: 'Description appears to contain a username or social media handle: "{match}". Please remove it.',
     ABNORMAL_WORD_DETECTED: 'Description contains abnormal or misspelled word(s): "{words}". Please use standard words.',
+    UNALLOWED_NUMBERS_DETECTED: 'Text contains unallowed or random numbers: "{numbers}". Only valid sizes (e.g. Size 10), measurements (e.g. 30cm, 100%), or years (e.g. 1990s) are allowed.',
     DESCRIPTION_NOT_RELEVANT: 'Description does not appear to be related to the product name "{name}". Please describe the actual item.',
     EXCESSIVE_REPETITION: 'Description repeats the word "{word}" too many times. Please vary your wording.',
     MIN_IMAGES_REQUIRED: 'At least 2 product images are required.',

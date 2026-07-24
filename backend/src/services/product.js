@@ -42,11 +42,13 @@ class ProductService {
     const errors = [];
     const { name, description } = productData;
 
-    // Validate required fields
-    if (!name || name.trim().length === 0) {
-      errors.push(CONSTANTS.MESSAGES.NAME_REQUIRED);
-    } else if (name.trim().length > 100) {
-      errors.push(CONSTANTS.MESSAGES.NAME_TOO_LONG);
+    // Validate name content: required, length, personal info, special chars,
+    // slang/handles, unallowed numbers, and abnormal words.
+    if (name && name.trim().length > 0) {
+      const nameValidation = descriptionValidationService.validateProductNameContent(name);
+      if (!nameValidation.isValid) {
+        errors.push(...nameValidation.errors);
+      }
     }
 
     if (!description || description.trim().length === 0) {

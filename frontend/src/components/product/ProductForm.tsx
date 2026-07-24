@@ -16,7 +16,7 @@ import { Alert } from '@/components/common/Alert';
 import { ImageUploader } from './ImageUploader';
 import { Package, Sparkles, AlertTriangle } from 'lucide-react';
 import type { UploadStatus } from '@/types';
-import { validateDescriptionContent } from '@/utils/descriptionValidation';
+import { validateDescriptionContent, validateProductNameContent } from '@/utils/descriptionValidation';
 
 interface ProductFormProps {
   onSubmit: (name: string, description: string, images: File[]) => Promise<void>;
@@ -42,8 +42,9 @@ export function ProductForm({ onSubmit, isSubmitting }: ProductFormProps) {
       setNameError('Product name is required');
       return false;
     }
-    if (value.trim().length > 100) {
-      setNameError('Product name must not exceed 100 characters');
+    const nameContentErrors = validateProductNameContent(value);
+    if (nameContentErrors.length > 0) {
+      setNameError(nameContentErrors.join('. '));
       return false;
     }
     setNameSuccess('Product name looks good!');

@@ -1,5 +1,5 @@
 /**
- * Description Validation (client-side mirror)
+ * Description & Product Name Validation (client-side mirror)
  *
  * Mirrors backend/src/services/descriptionValidation.js so the user gets
  * instant feedback before hitting submit. The backend re-validates
@@ -128,7 +128,14 @@ const COMMON_WORDS = new Set([
   'value', 'rate', 'cost', 'fee', 'charge', 'postage', 'freight',
   'delivery', 'handling', 'return', 'exchange', 'refund',
   'guarantee', 'warranty', 'note', 'notes', 'comment', 'comments',
-  'tip', 'gift', 'present', 'gem', 'find', 'bargain'
+  'tip', 'gift', 'present', 'gem', 'find', 'bargain', 'made', 'make',
+  'blazer', 'activewear', 'canvas', 'tote', 'collection', 'style',
+  'look', 'lookbook', 'wardrobe', 'closet', 'edition', 'recycled',
+  'true', 'cashmere', 'organic', 'polo', 'cargo', 'chiffon', 'velvet',
+  'cardigan', 'puffer', 'jumper', 'high', 'waisted', 'crafted',
+  'stitched', 'tailored', 'fitting', 'garment', 'garments', 'midi',
+  'mini', 'maxi', 'tunic', 'romper', 'onesie', 'bodysuit', 'overalls',
+  'jumpsuit', 'kimono', 'kaftan', 'poncho', 'shawl', 'vest', 'shrug'
 ]);
 
 const MAX_WORD_REPETITION_RATIO = 0.4;
@@ -139,8 +146,167 @@ function tokenize(text: string): string[] {
 }
 
 /**
- * Validate a product description client-side. Returns every error found
- * (not just the first) so the user gets instant feedback before hitting submit.
+ * Check for unallowed raw numbers or digit sequences.
+ */
+function checkUnallowedNumbers(text: string): string[] {
+  const tokens = text.match(/[a-z0-9%']+/gi) || [];
+  const invalidNumbers: string[] = [];
+
+  const allowedUnits = new Set([
+    'cm', 'm', 'mm', 'in', 'inch', 'inches', 'ft', 'foot', 'feet',
+    'kg', 'g', 'lb', 'lbs', 'oz', '%', 'pct', 'percent',
+    's', 'v', 'pack', 'piece', 'pieces', 'pair', 'pairs', 'set', 'sets',
+    'way', 'ply', 'gen', 'xl', 'xxl', '3xl', 'xs'
+  ]);
+
+  const sizeContextWords = new Set([
+    'size', 'sizes', 'bust', 'waist', 'hips', 'chest', 'height', 'width', 'length',
+    'depth', 'fit', 'fits', 'level', 'grade', 'model', 'type', 'lot', 'pack', 'set'
+  ]);
+
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i].toLowerCase();
+    if (!/\d/.test(token)) continue;
+
+    const digitsOnly = token.replace(/\D/g, '');
+    if (digitsOnly.length >= 7) {
+      invalidNumbers.push(token);
+      continue;
+    }
+
+    if (/^\d+$/.test(token)) {
+      const num = parseInt(token, 10);
+      if (token.length === 4 && num >= 1900 && num <= 2030) continue;
+
+      const prevToken = i > 0 ? tokens[i - 1].toLowerCase() : '';
+      const nextToken = i < tokens.length - 1 ? tokens[i + 1].toLowerCase() : '';
+
+      if (sizeContextWords.has(prevToken)) continue;
+      if (allowedUnits.has(nextToken)) continue;
+
+      if (num >= 1 && num <= 10 && token.length <= 2) continue;
+
+      invalidNumbers.push(token);
+      continue;
+    }
+
+    const match = token.match(/^(\d+)([a-z%]+)$/);
+    if (match) {
+      const [, digits, unit] = match;
+      if (allowedUnits.has(unit)) continue;
+      if (digits.length <= 2 && (unit === 's' || unit === 'th' || unit === 'st' || unit === 'nd' || unit === 'rd')) continue;
+
+      invalidNumbers.push(token);
+      continue;
+    }
+
+    invalidNumbers.push(token);
+  }
+
+  if (invalidNumbers.length > 0) {
+    const unique = [...new Set(invalidNumbers)];
+    return [
+      `Text contains unallowed or random numbers: "${unique.join(', ')}". Only valid sizes (e.g. Size 10), measurements (e.g. 30cm, 100%), or years (e.g. 1990s) are allowed.`
+    ];
+  }
+
+  return [];
+}
+
+/**
+ * Validate Product Name client-side.
+ */
+export function validateProductNameContent(name: string): string[] {
+  const errors: string[] = [];
+  const trimmed = name.trim();
+
+  if (!trimmed) {
+    return ['Product name is required.'];
+  }
+  if (trimmed.length > 100) {
+    return ['Product name must not exceed 100 characters.'];
+  }
+
+  // Personal info
+  for (const pattern of PERSONAL_INFO_PATTERNS) {
+    const found = trimmed.match(pattern);
+    if (found) {
+      errors.push(`Product name contains personal information or numbers: "${found[0].trim()}".`);
+      break;
+    }
+  }
+
+  // Special characters
+  const disallowed = trimmed.match(DESCRIPTION_DISALLOWED_CHAR_REGEX);
+  if (disallowed && disallowed.length > 0) {
+    const uniqueChars = [...new Set(disallowed)].map((c) => (c === ' ' ? '(space)' : c)).join(' ');
+    errors.push(`Product name contains disallowed special characters: ${uniqueChars}.`);
+  }
+
+  // Slang
+  const words = tokenize(trimmed);
+  const foundSlang = [...new Set(words.filter((w) => SLANG_WORDS.has(w)))];
+  if (foundSlang.length > 0) {
+    errors.push(`Product name contains informal short forms: ${foundSlang.join(', ')}.`);
+  }
+
+  // Usernames / handles
+  for (const pattern of SOCIAL_MEDIA_PATTERNS) {
+    const found = trimmed.match(pattern);
+    if (found) {
+      errors.push(`Product name contains a username or social handle: "${found[0].trim()}".`);
+      break;
+    }
+  }
+
+  // Unallowed numbers
+  errors.push(...checkUnallowedNumbers(trimmed));
+
+  // Abnormal words
+  const combinedDict = new Set([...COMMON_WORDS, ...FASHION_VOCAB, ...STOPWORDS]);
+  const abnormal: string[] = [];
+
+  for (const rawWord of words) {
+    const w = rawWord.toLowerCase();
+    if (/\d/.test(w)) continue;
+    if (w.length === 1) continue;
+    if (combinedDict.has(w)) continue;
+
+    let stemFound = false;
+    const stems = [
+      w.replace(/s$/, ''),
+      w.replace(/es$/, ''),
+      w.replace(/ed$/, ''),
+      w.replace(/ing$/, ''),
+      w.replace(/ing$/, 'e'),
+      w.replace(/er$/, ''),
+      w.replace(/er$/, 'e'),
+      w.replace(/ly$/, ''),
+      w.replace(/y$/, 'ie'),
+      w.replace(/ies$/, 'y')
+    ];
+
+    for (const stem of stems) {
+      if (stem && combinedDict.has(stem)) {
+        stemFound = true;
+        break;
+      }
+    }
+
+    if (!stemFound) {
+      abnormal.push(rawWord);
+    }
+  }
+
+  if (abnormal.length > 0) {
+    errors.push(`Product name contains abnormal word(s): "${[...new Set(abnormal)].join(', ')}".`);
+  }
+
+  return errors;
+}
+
+/**
+ * Validate a product description client-side. Returns every error found.
  */
 export function validateDescriptionContent(name: string, description: string): string[] {
   const errors: string[] = [];
@@ -184,13 +350,16 @@ export function validateDescriptionContent(name: string, description: string): s
     }
   }
 
+  // Unallowed numbers
+  errors.push(...checkUnallowedNumbers(description));
+
   // Abnormal / misspelled words
   const combinedDict = new Set([...COMMON_WORDS, ...FASHION_VOCAB, ...STOPWORDS]);
   const abnormal: string[] = [];
 
   for (const rawWord of words) {
     const w = rawWord.toLowerCase();
-    if (/^\d+[a-z%]*$/.test(w) || /^[a-z]+\d+$/.test(w)) continue;
+    if (/\d/.test(w)) continue;
     if (w.length === 1) continue;
     if (combinedDict.has(w)) continue;
 
