@@ -5,7 +5,8 @@
  * Uses axios for request/response handling.
  * 
  * @module services/api
- */import axios from "axios";
+ */
+import axios from "axios";
 import type { ApiResponse, Product } from '@/types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://restylee-backend.onrender.com/api';
