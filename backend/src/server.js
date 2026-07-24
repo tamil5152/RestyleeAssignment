@@ -71,8 +71,9 @@ if (CONSTANTS.NODE_ENV === 'development') {
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // API Routes
-app.use('/api/health', healthRoutes);
+app.use('/api/health', healthRoutes);  // also serves GET /api/health/ping (keep-alive)
 app.use('/api/products', productRoutes);
+
 
 // Root endpoint
 app.get('/', (req, res) => {

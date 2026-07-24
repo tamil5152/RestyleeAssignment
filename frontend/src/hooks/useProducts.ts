@@ -6,13 +6,14 @@
  * @module hooks/useProducts
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { productApi } from '@/services/api';
 import type { Product, ApiResponse } from '@/types';
 
 interface UseProductsReturn {
   products: Product[];
   isLoading: boolean;
+  isWakingUp: boolean;   // true when the request has taken > 3 s (Render cold start)
   error: string | null;
   fetchProducts: () => Promise<void>;
   createProduct: (
@@ -23,14 +24,27 @@ interface UseProductsReturn {
   deleteProduct: (id: string) => Promise<void>;
 }
 
+// How long (ms) to wait before showing the "waking up server" message.
+const WAKE_UP_THRESHOLD_MS = 3000;
+
 export function useProducts(): UseProductsReturn {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isWakingUp, setIsWakingUp] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const wakeUpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchProducts = useCallback(async () => {
     setIsLoading(true);
+    setIsWakingUp(false);
     setError(null);
+
+    // After WAKE_UP_THRESHOLD_MS, show a "waking up" message so users
+    // understand why it's slow (Render cold start) instead of assuming
+    // the site is broken.
+    wakeUpTimerRef.current = setTimeout(() => {
+      setIsWakingUp(true);
+    }, WAKE_UP_THRESHOLD_MS);
 
     try {
       const response = await productApi.getAllProducts();
@@ -41,7 +55,13 @@ export function useProducts(): UseProductsReturn {
       const errorObj = err as { message: string };
       setError(errorObj.message || 'Failed to fetch products');
     } finally {
+      // Cancel the wake-up timer if we finished before the threshold.
+      if (wakeUpTimerRef.current) {
+        clearTimeout(wakeUpTimerRef.current);
+        wakeUpTimerRef.current = null;
+      }
       setIsLoading(false);
+      setIsWakingUp(false);
     }
   }, []);
 
@@ -89,6 +109,7 @@ export function useProducts(): UseProductsReturn {
   return {
     products,
     isLoading,
+    isWakingUp,
     error,
     fetchProducts,
     createProduct,

@@ -28,6 +28,12 @@ let mobilenetLib = null;
 let modelPromise = null;
 let loadFailed = false;
 
+// Maximum milliseconds to wait for the TF.js model on a cold start.
+// If the model isn't ready in time we fall back to the fast heuristic
+// so the upload request still completes quickly instead of stalling for
+// 10-15 seconds while TF.js finishes initialising.
+const ML_CLASSIFY_TIMEOUT_MS = parseInt(process.env.ML_CLASSIFY_TIMEOUT_MS || '4000', 10);
+
 // MobileNet resizes internally to 224x224 anyway, so there is no benefit
 // to feeding it a full-resolution photo - doing so just wastes memory
 // (a 4000x3000 photo would otherwise allocate a ~140MB tensor). We
@@ -107,10 +113,47 @@ async function bufferToTensor(buffer) {
 /**
  * Classify an image buffer and decide if it's a fashion product.
  *
+ * Races the real ML classification against a timeout so that cold-start
+ * TF.js model loading never stalls the entire upload request. If the
+ * model isn't ready within ML_CLASSIFY_TIMEOUT_MS (default 4 s), we
+ * return {available: false} so the caller falls back to the heuristic
+ * immediately.
+ *
  * @param {Buffer} buffer - Raw image bytes (jpg/png)
  * @returns {Promise<{available: boolean, isFashion: boolean, confidence: number, matchedClass: string|null, topPredictions: Array}>}
  */
 async function classifyFashion(buffer) {
+  const timeoutResult = {
+    available: false,
+    isFashion: false,
+    confidence: 0,
+    matchedClass: null,
+    topPredictions: []
+  };
+
+  // Race: real classification vs. a wall-clock timeout.
+  // This prevents a cold-start TF.js load (10-15 s) from stalling uploads.
+  const classifyPromise = _classifyFashionInternal(buffer);
+  const timeoutPromise = new Promise((resolve) =>
+    setTimeout(() => resolve({ _timedOut: true }), ML_CLASSIFY_TIMEOUT_MS)
+  );
+
+  const result = await Promise.race([classifyPromise, timeoutPromise]);
+
+  if (result._timedOut) {
+    console.warn('[fashionClassifier] ML classification timed out after ' +
+      `${ML_CLASSIFY_TIMEOUT_MS}ms, falling back to heuristic.`);
+    return timeoutResult;
+  }
+
+  return result;
+}
+
+/**
+ * Internal classification logic (no timeout). Called by classifyFashion.
+ * @param {Buffer} buffer
+ */
+async function _classifyFashionInternal(buffer) {
   const model = await getModel();
 
   if (!model || loadFailed) {
