@@ -11,6 +11,7 @@ import { cn, formatDate, truncateText } from '@/utils';
 import { ChevronLeft, ChevronRight, Trash2, Calendar, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/common/Button';
 import type { Product } from '@/types';
+import { BACKEND_ORIGIN } from '@/services/api';
 
 interface ProductCardProps {
   product: Product;
@@ -40,7 +41,7 @@ export function ProductCard({ product, onDelete }: ProductCardProps) {
       <div className="relative aspect-[4/3] bg-charcoal-100 overflow-hidden">
         {currentImage ? (
           <img
-            src={currentImage.url}
+            src={currentImage.url.startsWith('http') ? currentImage.url : `${BACKEND_ORIGIN}${currentImage.url}`}
             alt={product.name}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             loading="lazy"

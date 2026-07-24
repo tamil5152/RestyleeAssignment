@@ -10,6 +10,8 @@ import type { ApiResponse, Product } from "@/types";
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
   "https://restylee-backend.onrender.com/api";
+  
+  export const BACKEND_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
