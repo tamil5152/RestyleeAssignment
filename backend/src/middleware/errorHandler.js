@@ -38,6 +38,7 @@ const errorHandler = (err, req, res, next) => {
 
   if (process.env.NODE_ENV === 'development') {
     console.error('Error:', err);
+  }
 
   // Handle multer errors
   if (err instanceof multer.MulterError) {
