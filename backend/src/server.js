@@ -24,6 +24,7 @@ const { errorHandler } = require('./middleware/errorHandler');
 const productRoutes = require('./routes/product');
 const healthRoutes = require('./routes/health');
 const fashionClassifier = require('./services/fashionClassifier');
+const ocrWorkerPool = require('./services/ocrWorkerPool');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -103,6 +104,11 @@ const PORT = CONSTANTS.PORT;
 // work while this is loading (they just fall back to the heuristic
 // detector until it's ready).
 fashionClassifier.warmUp();
+
+// Spin up the persistent OCR worker pool in the background at boot too,
+// for the same reason - so the first upload doesn't pay the one-off
+// Tesseract worker startup cost (loading the WASM core + traineddata).
+ocrWorkerPool.warmUp();
 
 app.listen(PORT, () => {
   console.log(`

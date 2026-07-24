@@ -13,11 +13,11 @@
  */
 
 const sharp = require('sharp');
-const Tesseract = require('tesseract.js');
 const path = require('path');
 const fs = require('fs').promises;
 const CONSTANTS = require('../constants');
 const fashionClassifier = require('./fashionClassifier');
+const ocrWorkerPool = require('./ocrWorkerPool');
 
 /**
  * Validation result structure
@@ -129,17 +129,11 @@ class ImageValidationService {
   .threshold(180)
   .toBuffer();
 
-      const result = await Tesseract.recognize(
-  processedBuffer,
-  'eng',
-  {
-    logger: () => {},
-    errorHandler: () => {},
-    langPath: path.join(__dirname, '../../'),  // use the bundled eng.traineddata
-    gzip: false,
-    cacheMethod: 'none'
-  }
-);
+      // Uses a pre-warmed, persistent worker from ocrWorkerPool instead of
+      // spinning up (and tearing down) a brand-new Tesseract worker on
+      // every call - that one-off setup cost was the single biggest
+      // contributor to slow product-listing requests.
+      const result = await ocrWorkerPool.recognize(processedBuffer);
 
       const text = result.data.text.trim();
       const confidence = result.data.confidence;
@@ -430,29 +424,41 @@ class ImageValidationService {
 
     const buffer = file.buffer;
 
-    // Step 3: Dimension validation
-    results.dimensions = await this.validateDimensions(buffer);
-    if (!results.dimensions.isValid) {
-      results.errors.push(results.dimensions.error);
+    // Steps 3-5: dimension check, fashion detection, portrait/headshot
+    // guard, and OCR text detection are all independent of one another -
+    // none of them depend on another's result. Running them concurrently
+    // (rather than four sequential `await`s) is what actually cuts
+    // per-image processing time, since OCR alone used to dominate the
+    // whole request.
+    const [dimensions, fashionDetection, portraitDetection, textDetection] = await Promise.all([
+      this.validateDimensions(buffer),
+      this.detectFashionProduct(buffer),
+      this.detectPortraitFace(buffer),
+      this.detectText(buffer)
+    ]);
+
+    results.dimensions = dimensions;
+    if (!dimensions.isValid) {
+      results.errors.push(dimensions.error);
     }
 
     // Step 4: Fashion product detection
-    results.fashionDetection = await this.detectFashionProduct(buffer);
-    if (!results.fashionDetection.isFashion) {
+    results.fashionDetection = fashionDetection;
+    if (!fashionDetection.isFashion) {
       results.errors.push(CONSTANTS.MESSAGES.NOT_FASHION_IMAGE);
     }
 
     // Step 4b: Portrait/headshot guard - reject close-up face photos
     // even when clothing is technically visible (e.g. a person wearing
     // a suit), since these are not standalone product photos.
-    results.portraitDetection = await this.detectPortraitFace(buffer);
-    if (results.portraitDetection.isPortrait) {
+    results.portraitDetection = portraitDetection;
+    if (portraitDetection.isPortrait) {
       results.errors.push(CONSTANTS.MESSAGES.NOT_PRODUCT_PORTRAIT);
     }
 
     // Step 5: Text detection
-    results.textDetection = await this.detectText(buffer);
-    if (results.textDetection.hasText) {
+    results.textDetection = textDetection;
+    if (textDetection.hasText) {
       results.errors.push(CONSTANTS.MESSAGES.TEXT_DETECTED);
     }
 
@@ -487,19 +493,4 @@ class ImageValidationService {
    * Generate thumbnail for image
    * @param {Buffer} buffer - Image buffer
    * @param {string} filename - Target filename
-   * @returns {Promise<string>} Path to saved thumbnail
-   */
-  async generateThumbnail(buffer, filename) {
-    const thumbnailName = `thumb_${filename}`;
-    const outputPath = path.join(CONSTANTS.UPLOAD_DIR, thumbnailName);
-
-    await sharp(buffer)
-      .resize(300, 300, { fit: 'cover' })
-      .jpeg({ quality: 80 })
-      .toFile(outputPath);
-
-    return outputPath;
-  }
-}
-
-module.exports = new ImageValidationService();
+   * @returns {Promise<string>} Path to saved

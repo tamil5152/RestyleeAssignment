@@ -86,13 +86,21 @@ class ProductService {
       return { success: false, product: null, errors };
     }
 
-    // Validate each image
+    // Validate each image. Each image's validation (dimensions, ML fashion
+    // classification, portrait check, OCR) is independent of every other
+    // image's, so we run them all concurrently with Promise.all instead of
+    // awaiting them one at a time - this is what actually shrinks total
+    // request time when a product has 2-5 images.
     const validatedImages = [];
     const imageErrors = [];
 
+    const validations = await Promise.all(
+      files.map((file) => imageValidationService.validateImage(file))
+    );
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const validation = await imageValidationService.validateImage(file);
+      const validation = validations[i];
 
       if (!validation.isValid) {
         imageErrors.push({
@@ -119,31 +127,35 @@ class ProductService {
       return { success: false, product: null, errors };
     }
 
-    // All validations passed - save images and create product
+    // All validations passed - save images and create product.
+    // Saving the main image and generating its thumbnail don't depend on
+    // each other (both just read the same source buffer), and the images
+    // themselves don't depend on each other either, so everything below
+    // runs concurrently instead of sequentially, file by file.
     const productId = uuidv4();
-    const imageRecords = [];
 
-    for (const { file, validation } of validatedImages) {
-      const ext = path.extname(file.originalname).toLowerCase();
-      const filename = `${productId}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}${ext}`;
+    const imageRecords = await Promise.all(
+      validatedImages.map(async ({ file, validation }) => {
+        const ext = path.extname(file.originalname).toLowerCase();
+        const filename = `${productId}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}${ext}`;
 
-      // Save main image
-      const imagePath = await imageValidationService.saveImage(file.buffer, filename);
+        await Promise.all([
+          imageValidationService.saveImage(file.buffer, filename),
+          imageValidationService.generateThumbnail(file.buffer, filename)
+        ]);
 
-      // Generate thumbnail
-      const thumbnailPath = await imageValidationService.generateThumbnail(file.buffer, filename);
-
-      imageRecords.push({
-        originalName: file.originalname,
-        filename,
-        thumbnail: `thumb_${filename}`,
-        url: `/uploads/products/${filename}`,
-        thumbnailUrl: `/uploads/products/thumb_${filename}`,
-        dimensions: validation.dimensions.metadata,
-        size: file.size,
-        mimetype: file.mimetype
-      });
-    }
+        return {
+          originalName: file.originalname,
+          filename,
+          thumbnail: `thumb_${filename}`,
+          url: `/uploads/products/${filename}`,
+          thumbnailUrl: `/uploads/products/thumb_${filename}`,
+          dimensions: validation.dimensions.metadata,
+          size: file.size,
+          mimetype: file.mimetype
+        };
+      })
+    );
 
     // Create product record
     const product = {
