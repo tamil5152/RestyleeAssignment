@@ -13,7 +13,7 @@ const CONSTANTS = {
   NODE_ENV: process.env.NODE_ENV || 'development',
 
   // CORS
-  CORS_ORIGIN: process.env.CORS_ORIGIN || 'https://restylee-assignment-61ky.vercel.app/',
+ CORS_ORIGIN: process.env.CORS_ORIGIN || 'https://restylee-assignment-61ky.vercel.app',
 
   // File Upload
   MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE, 10) || 5 * 1024 * 1024, // 5MB
