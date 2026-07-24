@@ -95,8 +95,14 @@ export function ProductForm({ onSubmit, isSubmitting }: ProductFormProps) {
       // Hide success message after 5 seconds
       setTimeout(() => setShowSuccess(false), 5000);
     } catch (err: unknown) {
-      const errorObj = err as { errors?: string[]; message?: string };
-      const serverErrors = errorObj.errors || [errorObj.message || 'Failed to create product'];
+      const axiosErr = err as {
+        response?: { data?: { errors?: string[]; message?: string } };
+        message?: string;
+      };
+      const serverErrors =
+        axiosErr.response?.data?.errors ||
+        (axiosErr.response?.data?.message ? [axiosErr.response.data.message] : null) ||
+        [axiosErr.message || 'Failed to create product'];
       setErrors(serverErrors);
     }
   };
