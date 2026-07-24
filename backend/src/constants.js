@@ -18,7 +18,7 @@ const CONSTANTS = {
   // File Upload
   MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE, 10) || 5 * 1024 * 1024, // 5MB
   MAX_IMAGES_PER_PRODUCT: parseInt(process.env.MAX_IMAGES_PER_PRODUCT, 10) || 5,
-  UPLOAD_DIR: process.env.UPLOAD_DIR || path.join(__dirname, '../../uploads/products'),
+  UPLOAD_DIR: process.env.UPLOAD_DIR || path.join(__dirname, '../uploads/products'),
 
   // Allowed Image Formats
   ALLOWED_MIME_TYPES: [
