@@ -22,13 +22,67 @@ interface ProductFormProps {
   onSubmit: (name: string, description: string, images: File[]) => Promise<void>;
   isSubmitting: boolean;
 }
-
 export function ProductForm({ onSubmit, isSubmitting }: ProductFormProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [images, setImages] = useState<UploadStatus[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [showSuccess, setShowSuccess] = useState(false);
+
+  // Field-level validation states
+  const [nameError, setNameError] = useState<string>('');
+  const [nameSuccess, setNameSuccess] = useState<string>('');
+  const [descError, setDescError] = useState<string>('');
+  const [descSuccess, setDescSuccess] = useState<string>('');
+
+  const validateNameField = (value: string) => {
+    setNameSuccess('');
+    setNameError('');
+    if (!value.trim()) {
+      setNameError('Product name is required');
+      return false;
+    }
+    if (value.trim().length > 100) {
+      setNameError('Product name must not exceed 100 characters');
+      return false;
+    }
+    setNameSuccess('Product name looks good!');
+    return true;
+  };
+
+  const validateDescriptionField = (nameVal: string, descVal: string) => {
+    setDescSuccess('');
+    setDescError('');
+    if (!descVal.trim()) {
+      setDescError('Product description is required');
+      return false;
+    }
+    if (descVal.trim().length > 2000) {
+      setDescError('Product description must not exceed 2000 characters');
+      return false;
+    }
+    
+    const contentErrors = validateDescriptionContent(nameVal.trim(), descVal);
+    if (contentErrors.length > 0) {
+      setDescError(contentErrors.join('. '));
+      return false;
+    }
+
+    setDescSuccess('Description is valid and safe!');
+    return true;
+  };
+
+  const handleNameBlur = () => {
+    validateNameField(name);
+    // If name changes, it might affect description relevance, so re-validate description if it has content
+    if (description.trim()) {
+      validateDescriptionField(name, description);
+    }
+  };
+
+  const handleDescriptionBlur = () => {
+    validateDescriptionField(name, description);
+  };
 
   const handleImagesChange = useCallback((newImages: UploadStatus[]) => {
     setImages(newImages);
@@ -43,26 +97,18 @@ export function ProductForm({ onSubmit, isSubmitting }: ProductFormProps) {
     setErrors([]);
     setShowSuccess(false);
 
+    // Validate fields on submit as well
+    const isNameValid = validateNameField(name);
+    const isDescValid = validateDescriptionField(name, description);
+
     // Client-side validation
     const validationErrors: string[] = [];
 
-    if (!name.trim()) {
-      validationErrors.push('Product name is required');
-    } else if (name.trim().length > 100) {
-      validationErrors.push('Product name must not exceed 100 characters');
+    if (!isNameValid) {
+      validationErrors.push('Please fix the product name issue');
     }
-
-    if (!description.trim()) {
-      validationErrors.push('Product description is required');
-    } else if (description.trim().length > 2000) {
-      validationErrors.push('Product description must not exceed 2000 characters');
-    }
-
-    // Full description content validation: personal info, special
-    // characters, slang/short-forms, usernames/handles, relevance to the
-    // product name, and excessive word repetition.
-    if (description.trim()) {
-      validationErrors.push(...validateDescriptionContent(name.trim(), description));
+    if (!isDescValid) {
+      validationErrors.push('Please fix the description safety issues');
     }
 
     const validImages = images.filter((img) => img.isValid !== false);
@@ -83,6 +129,8 @@ export function ProductForm({ onSubmit, isSubmitting }: ProductFormProps) {
       setName('');
       setDescription('');
       setImages([]);
+      setNameSuccess('');
+      setDescSuccess('');
       setShowSuccess(true);
 
       // Hide success message after 5 seconds
@@ -140,7 +188,15 @@ export function ProductForm({ onSubmit, isSubmitting }: ProductFormProps) {
         label="Product Name"
         placeholder="e.g., Vintage Denim Jacket"
         value={name}
-        onChange={(e) => setName(e.target.value)}
+        onChange={(e) => {
+          setName(e.target.value);
+          if (nameError || nameSuccess) {
+            validateNameField(e.target.value);
+          }
+        }}
+        onBlur={handleNameBlur}
+        error={nameError}
+        success={nameSuccess}
         required
         maxLength={100}
         helperText="Give your item a clear, descriptive name"
@@ -151,7 +207,15 @@ export function ProductForm({ onSubmit, isSubmitting }: ProductFormProps) {
         label="Description"
         placeholder="Describe your item - condition, size, brand, material, and any unique features..."
         value={description}
-        onChange={(e) => setDescription(e.target.value)}
+        onChange={(e) => {
+          setDescription(e.target.value);
+          if (descError || descSuccess) {
+            validateDescriptionField(name, e.target.value);
+          }
+        }}
+        onBlur={handleDescriptionBlur}
+        error={descError}
+        success={descSuccess}
         required
         maxLength={2000}
         rows={5}

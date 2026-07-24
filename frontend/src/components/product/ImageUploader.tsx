@@ -1,16 +1,41 @@
 /**
  * ImageUploader Component
- * 
- * Handles image upload with drag-and-drop, preview,
- * validation, and status indicators.
- * 
+ *
+ * Handles image upload with drag-and-drop, preview, and INSTANT
+ * client-side validation feedback on file selection.
+ *
+ * Validation stages:
+ *  1. Immediately on drop: file type + file size (< 5 ms)
+ *  2. After preview loads: image dimensions via native Image object (< 50 ms)
+ *     → isValid: false shown RIGHT AWAY if either check fails
+ *     → isValid: null + "Pending server check" badge if both pass
+ *  3. On form submit: server validates fashion detection + OCR text
+ *
+ * This means the user sees red/invalid badges instantly for broken files,
+ * and sees a "Looks good – will verify on submit" badge for files that
+ * pass all client-side rules.
+ *
  * @component ImageUploader
  */
 
 import { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { cn, createImagePreview, formatFileSize, validateImageFile } from '@/utils';
-import { Upload, X, ImageIcon, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import {
+  cn,
+  createImagePreview,
+  formatFileSize,
+  validateImageFile,
+  validateImageDimensions,
+} from '@/utils';
+import {
+  Upload,
+  X,
+  ImageIcon,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+  Clock,
+} from 'lucide-react';
 import type { UploadStatus } from '@/types';
 
 interface ImageUploaderProps {
@@ -36,42 +61,62 @@ export function ImageUploader({
       const filesToProcess = acceptedFiles.slice(0, remainingSlots);
       setIsProcessing(true);
 
-      const newImages: UploadStatus[] = [];
+      // Process ALL files concurrently so 5 images validate in parallel,
+      // not one-at-a-time.
+      const newImages: UploadStatus[] = await Promise.all(
+        filesToProcess.map(async (file) => {
+          // ── Step 1: Type + size (synchronous, < 1 ms) ──────────────────
+          const preValidation = validateImageFile(file);
+          if (!preValidation.isValid) {
+            return {
+              file,
+              preview: '',
+              isValidating: false,
+              isValid: false,
+              errors: [preValidation.error!],
+            };
+          }
 
-      for (const file of filesToProcess) {
-        // Client-side pre-validation
-        const preValidation = validateImageFile(file);
+          // ── Step 2: Generate preview + check dimensions concurrently ───
+          let preview = '';
+          try {
+            const [previewResult, dimResult] = await Promise.all([
+              createImagePreview(file),
+              validateImageDimensions(file),
+            ]);
 
-        if (!preValidation.isValid) {
-          newImages.push({
-            file,
-            preview: '',
-            isValidating: false,
-            isValid: false,
-            errors: [preValidation.error!],
-          });
-          continue;
-        }
+            preview = previewResult;
 
-        try {
-          const preview = await createImagePreview(file);
-          newImages.push({
-            file,
-            preview,
-            isValidating: false,
-            isValid: null,
-            errors: [],
-          });
-        } catch {
-          newImages.push({
-            file,
-            preview: '',
-            isValidating: false,
-            isValid: false,
-            errors: ['Failed to process image'],
-          });
-        }
-      }
+            if (!dimResult.isValid) {
+              return {
+                file,
+                preview,
+                isValidating: false,
+                isValid: false,
+                errors: [dimResult.error!],
+              };
+            }
+
+            // ── Step 3: All client-side checks pass ───────────────────────
+            // Mark as null (pending) — server will verify fashion/OCR on submit.
+            return {
+              file,
+              preview,
+              isValidating: false,
+              isValid: null,   // null = "passes client checks, pending server validation"
+              errors: [],
+            };
+          } catch {
+            return {
+              file,
+              preview,
+              isValidating: false,
+              isValid: false,
+              errors: ['Failed to process image'],
+            };
+          }
+        })
+      );
 
       onImagesChange([...images, ...newImages]);
       setIsProcessing(false);
@@ -96,8 +141,11 @@ export function ImageUploader({
   };
 
   const canAddMore = images.length < maxImages;
-  const hasMinimum = images.length >= minImages;
-  const validImages = images.filter((img) => img.isValid !== false);
+  const hasMinimum = images.filter((img) => img.isValid !== false).length >= minImages;
+  const validOrPendingImages = images.filter((img) => img.isValid !== false);
+  const invalidCount = images.filter((img) => img.isValid === false).length;
+  const pendingCount = images.filter((img) => img.isValid === null).length;
+  const confirmedValidCount = images.filter((img) => img.isValid === true).length;
 
   return (
     <div className="w-full space-y-4">
@@ -124,16 +172,22 @@ export function ImageUploader({
                 isDragActive ? 'bg-restylee-100' : 'bg-charcoal-100'
               )}
             >
-              <Upload
-                className={cn(
-                  'h-6 w-6',
-                  isDragActive ? 'text-restylee-600' : 'text-charcoal-500'
-                )}
-              />
+              {isProcessing ? (
+                <Loader2 className="h-6 w-6 text-restylee-500 animate-spin" />
+              ) : (
+                <Upload
+                  className={cn(
+                    'h-6 w-6',
+                    isDragActive ? 'text-restylee-600' : 'text-charcoal-500'
+                  )}
+                />
+              )}
             </div>
             <div>
               <p className="text-sm font-medium text-charcoal-700">
-                {isDragActive
+                {isProcessing
+                  ? 'Checking images…'
+                  : isDragActive
                   ? 'Drop images here...'
                   : 'Drag & drop images here'}
               </p>
@@ -147,17 +201,16 @@ export function ImageUploader({
                 JPG, JPEG, PNG
               </span>
               <span>Max 5MB each</span>
+              <span>Min 200×200px</span>
             </div>
           </div>
         </div>
       )}
 
-      {/* Image Counter */}
+      {/* Image Counter + Summary */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-charcoal-700">
-            Images
-          </span>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-medium text-charcoal-700">Images</span>
           <span
             className={cn(
               'text-xs font-semibold px-2 py-0.5 rounded-full',
@@ -168,10 +221,25 @@ export function ImageUploader({
           >
             {images.length} / {maxImages}
           </span>
+          {invalidCount > 0 && (
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+              {invalidCount} invalid
+            </span>
+          )}
+          {pendingCount > 0 && (
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+              {pendingCount} pending server check
+            </span>
+          )}
+          {confirmedValidCount > 0 && (
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+              {confirmedValidCount} verified ✓
+            </span>
+          )}
         </div>
         {!hasMinimum && images.length > 0 && (
           <span className="text-xs text-amber-600">
-            At least {minImages} images required
+            At least {minImages} valid images required
           </span>
         )}
       </div>
@@ -191,19 +259,25 @@ export function ImageUploader({
       )}
 
       {/* Validation Summary */}
-      {validImages.length > 0 && validImages.length === images.length && (
-        <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 rounded-xl px-4 py-2.5">
-          <CheckCircle2 className="h-4 w-4 shrink-0" />
-          <span>All {images.length} images ready for submission</span>
-        </div>
-      )}
+      {validOrPendingImages.length > 0 &&
+        validOrPendingImages.length === images.length &&
+        invalidCount === 0 && (
+          <div className="flex items-center gap-2 text-sm bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5">
+            <Clock className="h-4 w-4 shrink-0 text-blue-500" />
+            <span className="text-blue-700">
+              {images.length} image{images.length !== 1 ? 's' : ''} ready —{' '}
+              <span className="font-medium">
+                fashion detection &amp; text check happen on submit
+              </span>
+            </span>
+          </div>
+        )}
     </div>
   );
 }
 
-/**
- * Individual image preview card
- */
+// ─── Individual image preview card ────────────────────────────────────────────
+
 function ImagePreviewCard({
   image,
   index,
@@ -213,15 +287,21 @@ function ImagePreviewCard({
   index: number;
   onRemove: (index: number) => void;
 }) {
+  // isValid: false  → client-side check failed → RED immediately
+  // isValid: null   → client checks passed, pending server → BLUE/GRAY
+  // isValid: true   → server confirmed → GREEN
+  const borderClass =
+    image.isValid === false
+      ? 'border-red-300 bg-red-50'
+      : image.isValid === true
+      ? 'border-emerald-300 bg-emerald-50'
+      : 'border-blue-200 bg-blue-50/30';
+
   return (
     <div
       className={cn(
         'relative group rounded-xl overflow-hidden border-2 transition-all duration-200',
-        image.isValid === false
-          ? 'border-red-300 bg-red-50'
-          : image.isValid === true
-          ? 'border-emerald-300 bg-emerald-50'
-          : 'border-charcoal-200 bg-charcoal-100'
+        borderClass
       )}
     >
       {/* Image Preview */}
@@ -232,9 +312,10 @@ function ImagePreviewCard({
             alt={`Preview ${index + 1}`}
             className="w-full h-full object-cover"
           />
-          {/* Overlay on hover */}
+          {/* Hover overlay — remove button */}
           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
             <button
+              type="button"
               onClick={() => onRemove(index)}
               className="bg-white/90 hover:bg-white text-red-600 rounded-full p-2 transition-colors"
               title="Remove image"
@@ -249,21 +330,29 @@ function ImagePreviewCard({
         </div>
       )}
 
-      {/* Status Badge */}
+      {/* Status Badge (top-right corner) */}
       <div className="absolute top-2 right-2">
         {image.isValidating ? (
-          <div className="bg-white/90 backdrop-blur rounded-full p-1.5">
+          <div className="bg-white/90 backdrop-blur rounded-full p-1.5 shadow">
             <Loader2 className="h-3.5 w-3.5 text-restylee-500 animate-spin" />
           </div>
         ) : image.isValid === false ? (
-          <div className="bg-red-500 text-white rounded-full p-1">
+          <div className="bg-red-500 text-white rounded-full p-1 shadow" title="Invalid">
             <AlertCircle className="h-3.5 w-3.5" />
           </div>
         ) : image.isValid === true ? (
-          <div className="bg-emerald-500 text-white rounded-full p-1">
+          <div className="bg-emerald-500 text-white rounded-full p-1 shadow" title="Verified">
             <CheckCircle2 className="h-3.5 w-3.5" />
           </div>
-        ) : null}
+        ) : (
+          // null = pending server check
+          <div
+            className="bg-blue-500 text-white rounded-full p-1 shadow"
+            title="Passes basic checks — fashion & text will be verified on submit"
+          >
+            <Clock className="h-3.5 w-3.5" />
+          </div>
+        )}
       </div>
 
       {/* File Info */}
@@ -271,12 +360,10 @@ function ImagePreviewCard({
         <p className="text-xs font-medium text-charcoal-700 truncate">
           {image.file.name}
         </p>
-        <p className="text-xs text-charcoal-400">
-          {formatFileSize(image.file.size)}
-        </p>
+        <p className="text-xs text-charcoal-400">{formatFileSize(image.file.size)}</p>
       </div>
 
-      {/* Error Messages */}
+      {/* Inline Error Messages */}
       {image.errors.length > 0 && (
         <div className="p-2.5 bg-red-50 border-t border-red-100">
           {image.errors.map((error, i) => (
@@ -285,6 +372,16 @@ function ImagePreviewCard({
               <span>{error}</span>
             </p>
           ))}
+        </div>
+      )}
+
+      {/* Pending hint */}
+      {image.isValid === null && image.errors.length === 0 && (
+        <div className="p-2 bg-blue-50 border-t border-blue-100">
+          <p className="text-xs text-blue-600 flex items-center gap-1">
+            <Clock className="h-3 w-3 shrink-0" />
+            <span>Will verify fashion &amp; text on submit</span>
+          </p>
         </div>
       )}
     </div>

@@ -1,27 +1,33 @@
 /**
  * Textarea Component
  * 
- * Multi-line text input with character counter.
+ * Multi-line text input with character counter and success/error state.
+ * Supports inline field-level validation feedback (shown on blur).
  * 
  * @component Textarea
  */
 
 import { cn } from '@/utils';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { forwardRef } from 'react';
 
 interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
   error?: string;
+  /** When set, shows a green success border + checkmark message */
+  success?: string;
   helperText?: string;
   maxLength?: number;
 }
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ label, error, helperText, maxLength, className, value, ...props }, ref) => {
+  ({ label, error, success, helperText, maxLength, className, value, ...props }, ref) => {
     const currentLength = (value as string)?.length || 0;
     const isNearLimit = maxLength && currentLength > maxLength * 0.9;
     const isOverLimit = maxLength && currentLength > maxLength;
+
+    const hasError = Boolean(error) || Boolean(isOverLimit);
+    const hasSuccess = Boolean(success) && !hasError;
 
     return (
       <div className="w-full">
@@ -56,8 +62,10 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
             'placeholder:text-charcoal-400',
             'transition-all duration-200 resize-none',
             'focus:outline-none focus:ring-2 focus:ring-restylee-300 focus:border-restylee-400',
-            error || isOverLimit
+            hasError
               ? 'border-red-300 bg-red-50 focus:ring-red-200 focus:border-red-400'
+              : hasSuccess
+              ? 'border-emerald-300 bg-emerald-50 focus:ring-emerald-200 focus:border-emerald-400'
               : 'border-charcoal-200 bg-white hover:border-charcoal-300',
             className
           )}
@@ -69,7 +77,13 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
             <span>{error}</span>
           </div>
         )}
-        {helperText && !error && (
+        {hasSuccess && (
+          <div className="mt-1.5 flex items-center gap-1.5 text-sm text-emerald-600">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>{success}</span>
+          </div>
+        )}
+        {helperText && !hasError && !hasSuccess && (
           <p className="mt-1.5 text-sm text-charcoal-500">{helperText}</p>
         )}
       </div>

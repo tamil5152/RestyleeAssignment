@@ -121,13 +121,17 @@ class ImageValidationService {
    */
   async detectText(buffer) {
     try {
-      // Preprocess image for better OCR accuracy
+      // Preprocess image for OCR.
+      // 600×600 keeps enough resolution to detect watermarks/captions while
+      // reducing pixel count by 64% vs the old 1000×1000, directly cutting
+      // Tesseract's per-image processing time. The OCR worker pool already
+      // applies a 2500 ms timeout as a second safety net.
       const processedBuffer = await sharp(buffer)
-  .resize(1000, 1000, { fit: 'inside', withoutEnlargement: true })
-  .greyscale()
-  .normalize()
-  .threshold(180)
-  .toBuffer();
+        .resize(600, 600, { fit: 'inside', withoutEnlargement: true })
+        .greyscale()
+        .normalize()
+        .threshold(180)
+        .toBuffer();
 
       // Uses a pre-warmed, persistent worker from ocrWorkerPool instead of
       // spinning up (and tearing down) a brand-new Tesseract worker on
