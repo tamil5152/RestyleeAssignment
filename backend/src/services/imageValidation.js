@@ -122,10 +122,11 @@ class ImageValidationService {
     try {
       // Preprocess image for better OCR accuracy
       const processedBuffer = await sharp(buffer)
-        .greyscale()
-        .normalize()
-        .threshold(180)
-        .toBuffer();
+  .resize(1000, 1000, { fit: 'inside', withoutEnlargement: true })
+  .greyscale()
+  .normalize()
+  .threshold(180)
+  .toBuffer();
 
       const result = await Tesseract.recognize(
   processedBuffer,
