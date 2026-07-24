@@ -16,6 +16,7 @@ import { Alert } from '@/components/common/Alert';
 import { ImageUploader } from './ImageUploader';
 import { Package, Sparkles, AlertTriangle } from 'lucide-react';
 import type { UploadStatus } from '@/types';
+import { validateDescriptionContent } from '@/utils/descriptionValidation';
 
 interface ProductFormProps {
   onSubmit: (name: string, description: string, images: File[]) => Promise<void>;
@@ -57,19 +58,11 @@ export function ProductForm({ onSubmit, isSubmitting }: ProductFormProps) {
       validationErrors.push('Product description must not exceed 2000 characters');
     }
 
-    // Check for personal info patterns in description
-    const personalInfoPatterns = [
-      /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/,
-      /\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/,
-      /@[A-Za-z0-9_]{3,30}/,
-      /https?:\/\/[^\s]+/i,
-    ];
-
-    for (const pattern of personalInfoPatterns) {
-      if (pattern.test(description)) {
-        validationErrors.push('Description contains personal information. Please remove emails, phone numbers, social media handles, or URLs.');
-        break;
-      }
+    // Full description content validation: personal info, special
+    // characters, slang/short-forms, usernames/handles, relevance to the
+    // product name, and excessive word repetition.
+    if (description.trim()) {
+      validationErrors.push(...validateDescriptionContent(name.trim(), description));
     }
 
     const validImages = images.filter((img) => img.isValid !== false);
@@ -162,7 +155,7 @@ export function ProductForm({ onSubmit, isSubmitting }: ProductFormProps) {
         required
         maxLength={2000}
         rows={5}
-        helperText="Be detailed but avoid including personal contact information"
+        helperText="Plain text only: no special characters (_ @ # etc.), no short forms (ig, pls, sry...), no usernames or contact info. Keep it relevant to the item."
       />
 
       {/* Image Upload */}

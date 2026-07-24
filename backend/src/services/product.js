@@ -11,6 +11,7 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const database = require('../config/database');
 const imageValidationService = require('./imageValidation');
+const descriptionValidationService = require('./descriptionValidation');
 const CONSTANTS = require('../constants');
 
 /**
@@ -54,10 +55,18 @@ class ProductService {
       errors.push(CONSTANTS.MESSAGES.DESCRIPTION_TOO_LONG);
     }
 
-    // Validate description for personal information
-    const descriptionValidation = imageValidationService.validateDescription(description || '');
-    if (!descriptionValidation.isValid) {
-      errors.push(descriptionValidation.error);
+    // Validate description content: personal info, special characters,
+    // slang/short-forms, usernames/handles, relevance to product name,
+    // and excessive word repetition. Skipped only when the description
+    // is empty (that's already caught by the required-field check above).
+    if (description && description.trim().length > 0) {
+      const descriptionValidation = descriptionValidationService.validateDescriptionContent(
+        name || '',
+        description
+      );
+      if (!descriptionValidation.isValid) {
+        errors.push(...descriptionValidation.errors);
+      }
     }
 
     // Validate image count

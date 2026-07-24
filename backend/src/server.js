@@ -23,6 +23,7 @@ const { errorHandler } = require('./middleware/errorHandler');
 // Import routes
 const productRoutes = require('./routes/product');
 const healthRoutes = require('./routes/health');
+const fashionClassifier = require('./services/fashionClassifier');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -96,6 +97,12 @@ app.use(errorHandler);
 
 // Start server
 const PORT = CONSTANTS.PORT;
+
+// Load the local fashion-detection ML model in the background at boot so
+// the first product upload doesn't have to wait for it. Uploads still
+// work while this is loading (they just fall back to the heuristic
+// detector until it's ready).
+fashionClassifier.warmUp();
 
 app.listen(PORT, () => {
   console.log(`

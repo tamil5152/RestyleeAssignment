@@ -17,6 +17,7 @@ const Tesseract = require('tesseract.js');
 const path = require('path');
 const fs = require('fs').promises;
 const CONSTANTS = require('../constants');
+const fashionClassifier = require('./fashionClassifier');
 
 /**
  * Validation result structure
@@ -163,17 +164,51 @@ class ImageValidationService {
   }
 
   /**
-   * Detect if image contains a fashion product
-   * Uses a heuristic-based approach analyzing image characteristics
-   * 
-   * Note: In production, this would use a trained ML model (TensorFlow.js, 
-   * ONNX, or cloud vision API). For this assignment, we use a robust
-   * heuristic approach that analyzes image composition.
-   * 
+   * Detect if image contains a fashion product.
+   *
+   * Primary path: a LOCAL pre-trained MobileNet ML model
+   * (see services/fashionClassifier.js) actually recognizes the object
+   * in the image and checks it against a whitelist of clothing/footwear/
+   * bag/accessory classes. This runs entirely on this server process -
+   * no external AI API, no per-request network call.
+   *
+   * Fallback path: if the ML model failed to load (e.g. no outbound
+   * internet on first boot) we fall back to the old pixel/edge heuristic
+   * so the endpoint still works, just less accurately.
+   *
+   * @param {Buffer} buffer - Image buffer
+   * @returns {Promise<{isFashion: boolean, confidence: number, reason: string, method: string}>}
+   */
+  async detectFashionProduct(buffer) {
+    const mlResult = await fashionClassifier.classifyFashion(buffer);
+
+    if (mlResult.available) {
+      return {
+        isFashion: mlResult.isFashion,
+        confidence: mlResult.confidence,
+        reason: mlResult.isFashion
+          ? `Recognized as "${mlResult.matchedClass}"`
+          : `Top predictions did not match a clothing/footwear/bag/accessory class (best guesses: ${mlResult.topPredictions.slice(0, 3).map((p) => p.className).join(', ')})`,
+        method: 'ml'
+      };
+    }
+
+    // ML model unavailable - fall back to heuristic analysis.
+    const heuristicResult = await this.detectFashionProductHeuristic(buffer);
+    return { ...heuristicResult, method: 'heuristic' };
+  }
+
+  /**
+   * Heuristic-only fashion detector (fallback, no ML).
+   * Uses image composition analysis (color variance, edge density, etc.)
+   * This is a rough approximation and can accept some non-clothing
+   * images - it is only used if the ML model in fashionClassifier.js
+   * is unavailable.
+   *
    * @param {Buffer} buffer - Image buffer
    * @returns {Promise<{isFashion: boolean, confidence: number, reason: string}>}
    */
-  async detectFashionProduct(buffer) {
+  async detectFashionProductHeuristic(buffer) {
     try {
       const metadata = await sharp(buffer).metadata();
       const { width, height, format } = metadata;
@@ -352,36 +387,6 @@ class ImageValidationService {
     results.isValid = results.errors.length === 0;
 
     return results;
-  }
-
-  /**
-   * Validate product description for personal information
-   * @param {string} description - Product description
-   * @returns {{isValid: boolean, error: string|null, matches: Array}}
-   */
-  validateDescription(description) {
-    const matches = [];
-
-    for (const pattern of CONSTANTS.PERSONAL_INFO_PATTERNS) {
-      const found = description.match(pattern);
-      if (found) {
-        matches.push(...found);
-      }
-    }
-
-    if (matches.length > 0) {
-      return {
-        isValid: false,
-        error: CONSTANTS.MESSAGES.PERSONAL_INFO_DETECTED,
-        matches: [...new Set(matches)] // Remove duplicates
-      };
-    }
-
-    return {
-      isValid: true,
-      error: null,
-      matches: []
-    };
   }
 
   /**
