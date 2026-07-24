@@ -9,8 +9,13 @@
  * Vision/Gemini, no per-request network call). The model weights are
  * downloaded once when the server process starts (or read from local
  * cache) and then every classification runs entirely in-process using
- * pure-JS @tensorflow/tfjs (CPU backend) — no native bindings, no API
+ * pure-JS @tensorflow/tfjs (CPU backend) - no native bindings, no API
  * key, no network round-trip per image.
+ *
+ * The model is a general-purpose ImageNet classifier. We don't need a
+ * fashion-specific model: ImageNet already contains ~90 classes that map
+ * directly to clothing / footwear / bags / accessories, so we simply check
+ * whether the model's top predictions land in that whitelist.
  *
  * @module services/fashionClassifier
  */
@@ -23,6 +28,13 @@ let mobilenetLib = null;
 let modelPromise = null;
 let loadFailed = false;
 
+// MobileNet resizes internally to 224x224 anyway, so there is no benefit
+// to feeding it a full-resolution photo - doing so just wastes memory
+// (a 4000x3000 photo would otherwise allocate a ~140MB tensor). We
+// downscale with sharp BEFORE building the tensor to keep memory usage
+// small and constant regardless of the uploaded photo's original size.
+const CLASSIFIER_INPUT_SIZE = 224;
+
 /**
  * Lazily require heavy ML deps + load the model exactly once.
  * If loading fails (e.g. no outbound internet on first boot), we mark
@@ -34,6 +46,8 @@ function getModel() {
 
   modelPromise = (async () => {
     try {
+      // Require inside the function so the rest of the app still works
+      // even if these deps are missing in an environment.
       tf = require('@tensorflow/tfjs');
       require('@tensorflow/tfjs-backend-cpu');
       mobilenetLib = require('@tensorflow-models/mobilenet');
@@ -67,14 +81,17 @@ async function warmUp() {
 }
 
 /**
- * Decode a JPG/PNG buffer into an int32 tf.Tensor3D of shape [h, w, 3]
- * using sharp (already a dependency) instead of tfjs-node's native
- * decoder, so no native compilation is required at deploy time.
+ * Decode a JPG/PNG buffer into a small int32 tf.Tensor3D of shape
+ * [224, 224, 3] using sharp (already a dependency) instead of tfjs-node's
+ * native decoder. Downscaling here (rather than after decode) is what
+ * keeps memory usage low and constant no matter how large the uploaded
+ * photo is.
  * @param {Buffer} buffer
  * @returns {Promise<tf.Tensor3D>}
  */
 async function bufferToTensor(buffer) {
   const { data, info } = await sharp(buffer)
+    .resize(CLASSIFIER_INPUT_SIZE, CLASSIFIER_INPUT_SIZE, { fit: 'fill' })
     .removeAlpha()
     .toColorspace('srgb')
     .raw()
