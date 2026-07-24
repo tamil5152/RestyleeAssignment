@@ -10,7 +10,7 @@
 import axios, { AxiosError, type AxiosResponse } from 'axios';
 import type { ApiResponse, Product } from '@/types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://restylee-backend.onrender.com';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
