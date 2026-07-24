@@ -25,6 +25,7 @@ const productRoutes = require('./routes/product');
 const healthRoutes = require('./routes/health');
 
 const app = express();
+app.set('trust proxy', 1);
 
 // Security middleware
 app.use(helmet({
