@@ -6,19 +6,16 @@
  * MobileNet image classification model.
  *
  * IMPORTANT: This does NOT call any external AI API (no OpenAI, no Google
- * Vision, no per-request network call). The model file is downloaded once
- * when the server process starts (or read from local cache) and then all
- * classification happens in-process using @tensorflow/tfjs-node. There is
- * no API key and no network round-trip per image.
- *
- * The model is a general-purpose ImageNet classifier. We don't need a
- * fashion-specific model: ImageNet already contains ~90 classes that map
- * directly to clothing / footwear / bags / accessories, so we simply check
- * whether the model's top predictions land in that whitelist.
+ * Vision/Gemini, no per-request network call). The model weights are
+ * downloaded once when the server process starts (or read from local
+ * cache) and then every classification runs entirely in-process using
+ * pure-JS @tensorflow/tfjs (CPU backend) — no native bindings, no API
+ * key, no network round-trip per image.
  *
  * @module services/fashionClassifier
  */
 
+const sharp = require('sharp');
 const CONSTANTS = require('../constants');
 
 let tf = null;
@@ -37,10 +34,12 @@ function getModel() {
 
   modelPromise = (async () => {
     try {
-      // Require inside the function so the rest of the app still works
-      // even if these native/heavy deps are missing in an environment.
-      tf = require('@tensorflow/tfjs-node');
+      tf = require('@tensorflow/tfjs');
+      require('@tensorflow/tfjs-backend-cpu');
       mobilenetLib = require('@tensorflow-models/mobilenet');
+
+      await tf.setBackend('cpu');
+      await tf.ready();
 
       const model = await mobilenetLib.load({
         version: 2,
@@ -68,6 +67,27 @@ async function warmUp() {
 }
 
 /**
+ * Decode a JPG/PNG buffer into an int32 tf.Tensor3D of shape [h, w, 3]
+ * using sharp (already a dependency) instead of tfjs-node's native
+ * decoder, so no native compilation is required at deploy time.
+ * @param {Buffer} buffer
+ * @returns {Promise<tf.Tensor3D>}
+ */
+async function bufferToTensor(buffer) {
+  const { data, info } = await sharp(buffer)
+    .removeAlpha()
+    .toColorspace('srgb')
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  return tf.tensor3d(
+    Uint8Array.from(data),
+    [info.height, info.width, info.channels],
+    'int32'
+  );
+}
+
+/**
  * Classify an image buffer and decide if it's a fashion product.
  *
  * @param {Buffer} buffer - Raw image bytes (jpg/png)
@@ -89,8 +109,7 @@ async function classifyFashion(buffer) {
   let imageTensor = null;
 
   try {
-    // Decode straight from bytes -> uint8 tensor, no filesystem round-trip.
-    imageTensor = tf.node.decodeImage(buffer, 3);
+    imageTensor = await bufferToTensor(buffer);
 
     const predictions = await model.classify(imageTensor, 10);
 
@@ -125,8 +144,6 @@ async function classifyFashion(buffer) {
       }))
     };
   } catch (error) {
-    // Any runtime decode/classify failure -> treat model as unavailable
-    // for this image only, let the caller fall back to heuristics.
     console.error('[fashionClassifier] Classification error:', error.message);
     return {
       available: false,
